@@ -6,6 +6,7 @@ import TransportCard from './components/TransportCard';
 import LoginPage from './components/LoginPage';
 import Itinerary from './components/Itinerary';
 import { CityAutocomplete } from './components/CityAutocomplete';
+import { WeatherAndPacking } from './components/WeatherAndPacking';
 import { 
   MapPin, Calendar, Users, ArrowRight, Loader2, Info, Star, 
   Map, Hotel, Navigation, Coffee, Camera, CheckCircle2, ChevronRight, ChevronLeft,
@@ -35,9 +36,6 @@ const App: React.FC = () => {
   // --- Selection State ---
   const [selectedTransport, setSelectedTransport] = useState<TransportOption | null>(null);
   const [selectedStay, setSelectedStay] = useState<Stay | null>(null);
-  
-  // --- Modals ---
-  const [showScope, setShowScope] = useState(false);
 
   // --- Helpers ---
   const getRealPhotoUrl = (query: string) => {
@@ -47,6 +45,113 @@ const App: React.FC = () => {
   const openInMaps = (name: string) => {
     const query = encodeURIComponent(`${name}, ${plan?.destination || 'India'}`);
     window.open(`https://www.google.com/maps/search/?api=1&query=${query}`, '_blank');
+  };
+
+  const handleSaveItineraryPdf = () => {
+    if (!plan) return;
+    const transportCost = selectedTransport ? selectedTransport.cost : (plan.transportOptions[0]?.cost || 0);
+    const stayCost = selectedStay ? selectedStay.pricePerNight : (plan.stayOptions[0]?.pricePerNight || 0);
+    const totalTransport = transportCost * travelers * 2;
+    const totalStay = stayCost * days * Math.ceil(travelers / 2);
+    const totalFood = plan.estimatedFoodCostPerDay * days * travelers;
+    const totalLocalTravel = plan.localTravelCostEstimate;
+    const buffer = 1000;
+    const grandTotal = totalTransport + totalStay + totalFood + totalLocalTravel + buffer;
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) { alert("Please allow popups."); return; }
+    printWindow.document.write(generatePdfContent(plan, transportCost, stayCost, totalTransport, totalStay, totalFood, totalLocalTravel, buffer, grandTotal));
+    printWindow.document.close();
+  };
+
+  const generatePdfContent = (plan: TripPlan, transportCost: number, stayCost: number, totalTransport: number, totalStay: number, totalFood: number, totalLocalTravel: number, buffer: number, grandTotal: number): string => {
+    const destLower = plan.destination.toLowerCase();
+    let weatherAdvice = "Versatile casual wear and comfortable walking shoes.";
+    let weatherTemp = "26°C / 17°C";
+    
+    if (destLower.includes('goa') || destLower.includes('kerala') || destLower.includes('mumbai')) {
+      weatherAdvice = "Light cotton clothes, beachwear, and sunscreen.";
+      weatherTemp = "32°C / 24°C";
+    } else if (destLower.includes('shimla') || destLower.includes('manali') || destLower.includes('leh')) {
+      weatherAdvice = "Heavy woolens, thermal layers, and warm jackets.";
+      weatherTemp = "12°C / 2°C";
+    } else if (destLower.includes('jaipur') || destLower.includes('delhi')) {
+      weatherAdvice = "Breathable cotton garments and sun protection.";
+      weatherTemp = "30°C / 18°C";
+    }
+
+    return `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>YatraAI_Itinerary_${plan.source}_to_${plan.destination}</title>
+          <style>
+            body { font-family: 'Segoe UI', Tahoma, sans-serif; color: #1e293b; padding: 40px; line-height: 1.6; }
+            .header { display: flex; justify-content: space-between; border-bottom: 3px solid #f97316; padding-bottom: 20px; margin-bottom: 30px; }
+            .brand-title { font-size: 28px; font-weight: 800; color: #ea580c; margin: 0; }
+            .tagline { font-size: 14px; color: #64748b; }
+            .card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; margin-bottom: 20px; }
+            h2 { color: #0f172a; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; margin-top: 30px; font-size: 20px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+            th, td { padding: 12px; border-bottom: 1px solid #e2e8f0; text-align: left; }
+            th { background: #f1f5f9; }
+            .day-box { margin-bottom: 25px; border-left: 4px solid #f97316; padding-left: 20px; break-inside: avoid; }
+            .total-row { font-weight: bold; background: #fff7ed; color: #9a3412; }
+            .weather-badge { display: inline-block; background: #e0f2fe; color: #0369a1; padding: 4px 12px; border-radius: 99px; font-size: 12px; font-weight: 600; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div>
+              <h1 class="brand-title">YatraAI</h1>
+              <div class="tagline">Smart India Travel Planner</div>
+            </div>
+            <div style="text-align: right">
+              <div style="font-size: 18px; font-weight: 700;">${plan.source} ➔ ${plan.destination}</div>
+              <div style="color: #64748b;">${travelers} Travelers • ${days} Days Trip</div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div style="margin-bottom: 10px;"><span class="weather-badge">Weather Forecast: ${weatherTemp}</span></div>
+            <p><strong>Trip Summary:</strong> ${plan.summary}</p>
+            <p><strong>Packing Advice:</strong> ${weatherAdvice}</p>
+          </div>
+
+          <h2>Detailed Budget Estimate</h2>
+          <table>
+            <thead>
+              <tr><th>Category</th><th>Description</th><th>Amount</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Travel</td><td>Round Trip for ${travelers} Travelers</td><td>₹${totalTransport.toLocaleString()}</td></tr>
+              <tr><td>Stay</td><td>Accommodation for ${days} Nights</td><td>₹${totalStay.toLocaleString()}</td></tr>
+              <tr><td>Food</td><td>Estimated Food & Drinks</td><td>₹${totalFood.toLocaleString()}</td></tr>
+              <tr><td>Local Travel</td><td>Sightseeing & Local Commute</td><td>₹${totalLocalTravel.toLocaleString()}</td></tr>
+              <tr><td>Buffer</td><td>Emergency Margin</td><td>₹${buffer.toLocaleString()}</td></tr>
+              <tr class="total-row"><td colspan="2">Grand Total Estimate</td><td>₹${grandTotal.toLocaleString()}</td></tr>
+            </tbody>
+          </table>
+
+          <h2>Day-by-Day Itinerary</h2>
+          ${plan.itinerary.map(day => `
+            <div class="day-box">
+              <h3 style="margin: 0 0 10px 0; color: #ea580c;">Day ${day.dayNumber}: ${day.theme}</h3>
+              ${day.activities.map(act => `
+                <div style="margin-bottom: 10px;">
+                  <strong>${act.timeSlot}:</strong> ${act.title}
+                  <div style="font-size: 13px; color: #475569; margin-top: 2px;">${act.description}</div>
+                </div>
+              `).join('')}
+            </div>
+          `).join('')}
+
+          <div style="margin-top: 40px; border-top: 1px solid #e2e8f0; padding-top: 20px; text-align: center; font-size: 12px; color: #94a3b8;">
+            Generated by YatraAI - Your Personal Indian Travel Companion. Have a safe journey!
+          </div>
+          <script>window.onload = function() { window.print(); }</script>
+        </body>
+      </html>
+    `;
   };
 
   // --- Handlers ---
@@ -107,7 +212,6 @@ const App: React.FC = () => {
             <div className="bg-orange-500 p-2 rounded-lg"><Navigation size={20} /></div>
             <span className="text-xl font-bold">YatraAI</span>
           </div>
-          <button onClick={() => setShowScope(true)} className="text-sm hover:text-orange-400 transition-colors">Future Scope</button>
         </nav>
 
         {/* Hero Background */}
@@ -194,22 +298,6 @@ const App: React.FC = () => {
             </div>
           )}
         </div>
-
-        {/* Future Scope Modal */}
-        {showScope && (
-          <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
-            <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-lg w-full p-6 text-slate-200">
-              <h2 className="text-2xl font-bold mb-4 text-white">Future Roadmap</h2>
-              <ul className="space-y-3 mb-6">
-                <li className="flex gap-2"><CheckCircle2 className="text-green-500" /> AI-based personal guide chatbot</li>
-                <li className="flex gap-2"><CheckCircle2 className="text-green-500" /> Real-time ticket booking integration</li>
-                <li className="flex gap-2"><CheckCircle2 className="text-green-500" /> AR (Augmented Reality) view for monuments</li>
-                <li className="flex gap-2"><CheckCircle2 className="text-green-500" /> Social feed to find travel buddies</li>
-              </ul>
-              <button onClick={() => setShowScope(false)} className="w-full bg-slate-800 py-2 rounded-lg hover:bg-slate-700">Close</button>
-            </div>
-          </div>
-        )}
       </div>
     );
   }
@@ -253,6 +341,8 @@ const App: React.FC = () => {
           </div>
         </div>
   
+        <WeatherAndPacking destination={destination} days={days} />
+
         <div className="space-y-12">
           {/* Day-Wise Itinerary */}
           {plan?.itinerary && plan.itinerary.length > 0 && (
@@ -610,7 +700,7 @@ const App: React.FC = () => {
                  Next <ChevronRight size={18} />
                </button>
              ) : (
-                <button className="bg-green-600 hover:bg-green-700 text-white px-8 py-2.5 rounded-lg font-bold shadow-lg shadow-green-200 flex items-center gap-2">
+                <button onClick={handleSaveItineraryPdf} className="bg-green-600 hover:bg-green-700 text-white px-8 py-2.5 rounded-lg font-bold shadow-lg shadow-green-200 flex items-center gap-2">
                    Save Itinerary <CheckCircle2 size={18} />
                 </button>
              )}
